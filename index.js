@@ -55,7 +55,6 @@ server.post('/api/login', (req, res) => {
     Users.findBy({username})
     .first()
     .then(user => {
-      req.session.user = user;
       if (user && bcrypt.compareSync(password, user.password)) {
         const token = generateToken(user); // new
         res.status(200).json({ 
@@ -73,11 +72,43 @@ server.post('/api/login', (req, res) => {
     });
 });
 
+restricted = (req, res, next) => {
+    const token = req.headers.authorization;
+    if (token) {
+      // is it valid?
+      jwt.verify(token, secret, (err, decodedToken) => {
+        if (err) {
+          // record the event
+          res.status(401).json({ you: "can't touch this!" });
+        } else {
+          req.decodedJwt = decodedToken;
+          next();
+        }
+      });
+    } else {
+      res.status(401).json({ you: 'shall not pass!' });
+    }
+};
 
+checkRole = role => {
+      return function(req, res, next) {
+        if (req.decodedJwt.roles && req.decodedJwt.roles.includes(role)) {
+            next();
+          } else {
+            res.status(403).json({ you: 'you have no power here!' });
+          }
+      };
+};
 
+  
+server.get('/api/users', restricted, checkRole('Admin'), (req, res) => {
+    Users.find()
+      .then(users => {
+        res.json({ users, decodedToken: req.decodedJwt });
+      })
+      .catch(err => res.send(err));
+});
 
 
 const port = process.env.PORT || 5000;
 server.listen(port, () => console.log(`\n**** Running on port ${port} ****\n`));
-
-//
